@@ -32,5 +32,8 @@ publish: build
 
 .PHONY: watch
 watch:
-	@find . -not \( -path './.stack-work*' -or -path './.git*' \) \
-		| entr -cd ${MAKE}
+	@while true; do \
+		find . -not \( -path './.stack-work*' -or -path './.git*' \) \
+			| entr -cd ${MAKE}; \
+		[[ $$? == 0 ]] && break; \
+	done
