@@ -5,7 +5,7 @@ copyright: "2022 Carlos Prado"
 github: "cpradog/invoices"
 author: "Carlos Prado <carlos.prado@cpradog.com>"
 maintainer: "carlos.prado@cpradog.com"
-description: "Please see the README on GitHub at <https://github.com/githubuser/invoices#readme>"
+description: "Please see the README on GitHub at <https://github.com/cpradog/invoices#readme>"
 synopsis: "Plain text invoice manager"
 category: Finances
 
@@ -15,7 +15,11 @@ extra-source-files:
 dependencies:
   - base >= 4.7 && < 5
   - hspec
-  - hspec-contrib
+  - array
+  - containers
+  - text
+  - Decimal
+  - neat-interpolation
 
 library:
   source-dirs: src
