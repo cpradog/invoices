@@ -15,10 +15,14 @@ extra-source-files:
 dependencies:
   - base >= 4.7 && < 5
   - hspec
+  - lens
+  - mtl
+  - errors
+  - either
   - array
   - containers
-  - text
   - Decimal
+  - text
   - neat-interpolation
 
 library:
