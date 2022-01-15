@@ -38,13 +38,13 @@ spec = do
 
   describe "evaluate" $ do
     it "should expose resulted variables values" $ do
-      let ctx = evaluate "a = \"3.3\" + 2 - -1 * 2 / 3"
-      fmapR (variable "a") ctx `shouldBe` Right (Just (NumberValue 5.96667))
+      fmapR (variable "a") (evaluate "a = \"3.3\" + 2 - -1 * 2 / 3") `shouldBe` Right (Just (NumberValue 5.96667))
 
     it "should fail with 'not a number' when a non number string is used in expressions" $ do
       evaluate "a = \"p\" + 2" `shouldBe` Left "not a number"
       evaluate "a = 1 + \"p\"" `shouldBe` Left "not a number"
       evaluate "a = -\"p\"" `shouldBe` Left "not a number"
+      fmapR (variable "a") (evaluate "a = \"something\"") `shouldBe` Right (Just (StringValue "something"))
 
     it "should fail with 'variable X not defined' when an undefined variable is used in an expression" $ do
       evaluate "a = b + 2" `shouldBe` Left "Variable 'b' not defined"
