@@ -84,7 +84,7 @@ data ASTNode
 
 -- | Generate the parse error description
 parseError :: [Token] -> a
-parseError _ = error "TODO: explain the error"
+parseError (t:ts) = error ((show t) ++ "\n" ++ (parseError ts))
 
 -- | Parse given tokens into an AST
 parse :: [Token] -> [ASTNode]

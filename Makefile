@@ -20,7 +20,7 @@ build:
 
 .PHONY: test
 test:
-	@stack build --test
+	@stack build --test --coverage
 
 .PHONY: docs
 docs:

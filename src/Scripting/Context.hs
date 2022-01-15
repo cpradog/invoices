@@ -1,6 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-{-# OPTIONS_GHC -Wno-overlapping-patterns #-}
 {-# OPTIONS_HADDOCK prune, show-extensions #-}
 
 -- |
@@ -18,23 +16,27 @@ module Scripting.Context
     -- * Script evaluation
     ScriptContext (..),
     emptyContext,
+    taxes,
+    variables,
     variable,
     setVariable,
     evaluate,
   )
 where
 
-import Control.Error.Safe
-import Control.Error.Util (fmapR)
+import Control.Error (fmapR)
+import Control.Error.Safe (justErr)
 import Control.Lens
 import Control.Monad.State
-import Data.Decimal
-import Data.Either.Combinators
+import Data.Decimal (Decimal, roundTo)
+import Data.Either.Combinators (maybeToRight, unlessLeft, whenRight)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Map.Internal.Debug (node)
 import Data.Text.Internal.Fusion.Types (Scan (Scan1))
 import Scripting.Internal.Lexer
 import Scripting.Internal.Parser
+import Text.Read (readMaybe)
 
 -- | Represents a variant value
 data Value
@@ -45,16 +47,14 @@ data Value
   deriving (Show, Eq)
 
 -- | Returns the string representation of the value.
-valueAsString :: Maybe Value -> Maybe String
-valueAsString Nothing = Nothing
-valueAsString (Just (NumberValue v)) = Just (show v)
-valueAsString (Just (StringValue v)) = Just v
+valueAsString :: Value -> Maybe String
+valueAsString (NumberValue v) = Just (show v)
+valueAsString (StringValue v) = Just v
 
 -- | Converts, if needed, the value into a decimal number.
-valueAsDecimal :: Maybe Value -> Maybe Decimal
-valueAsDecimal Nothing = Nothing
-valueAsDecimal (Just (NumberValue v)) = Just v
-valueAsDecimal (Just (StringValue v)) = Nothing
+valueAsDecimal :: Value -> Maybe Decimal
+valueAsDecimal (NumberValue v) = Just v
+valueAsDecimal (StringValue v) = readMaybe v :: Maybe Decimal
 
 -- -- | The script execution context
 data ScriptContext = ScriptContext
@@ -77,52 +77,52 @@ variable name ctx = ctx ^. variables . at name
 
 -- | Maybe change context variable value
 setVariable :: String -> Maybe Value -> ScriptContext -> ScriptContext
-setVariable name value = (variables . at name) .~ value
+setVariable name value = variables . at name .~ value
 
 -- | Evaluate given script and return final context
-evaluate :: String -> ScriptContext
-evaluate script = do
-  evalState (eval ast) ctx
+evaluate :: String -> Either String ScriptContext
+evaluate script = evalState (eval ast) emptyContext
   where
     ast = parse (tokens script)
-    ctx = emptyContext
+    eval [] = gets Right
     eval (n : ns) = do
-      evaluateNode n
-      eval ns
-    eval [] = get
+      value <- evalNode n
+      case value of
+        Left e -> return (Left e)
+        Right _ -> eval ns
 
 -- | Evaluate single AST branch
-evaluateNode :: ASTNode -> State ScriptContext (Either String Value)
-evaluateNode (LiteralNumber d) = do return (Right (NumberValue d))
-evaluateNode (LiteralString s) = do return (Right (StringValue s))
-evaluateNode (VariableRef name) = gets $ justErr ("Variable '" ++ name ++ "' not defined") . variable name
-evaluateNode (Sum n1 n2) = evalExpression (\d1 d2 -> Just (d1 + d2)) n1 n2
-evaluateNode (Substract n1 n2) = evalExpression (\d1 d2 -> Just (d1 - d2)) n1 n2
-evaluateNode (Multiply n1 n2) = evalExpression (\d1 d2 -> Just (d1 * d2)) n1 n2
-evaluateNode (Divide n1 n2) = evalExpression (\d1 d2 -> Just (d1 / d2)) n1 n2
-evaluateNode (Negate n) = do
-  value <- evaluateNode n
+evalNode :: ASTNode -> State ScriptContext (Either String Value)
+evalNode (LiteralNumber d) = return (Right (NumberValue d))
+evalNode (LiteralString s) = return (Right (StringValue s))
+evalNode (VariableRef name) = gets $ justErr ("Variable '" ++ name ++ "' not defined") . variable name
+evalNode (Sum n1 n2) = evalExpr (+) n1 n2
+evalNode (Substract n1 n2) = evalExpr (-) n1 n2
+evalNode (Multiply n1 n2) = evalExpr (*) n1 n2
+evalNode (Divide n1 n2) = evalExpr (/) n1 n2
+evalNode (Negate n) = do
+  value <- evalNode n
   return
     ( case value of
         Left e -> Left e
         Right v ->
           maybeToRight
             "not a number"
-            (fmap (NumberValue . negate) (valueAsDecimal (Just v)))
+            (fmap (NumberValue . negate) (valueAsDecimal v))
     )
-evaluateNode (Assignment name n) = do
+evalNode (Assignment name n) = do
   ctx <- get
-  value <- evaluateNode n
+  value <- evalNode n
   whenRight value (\v -> put (setVariable name (Just v) ctx))
   return value
 
--- | Evaluate expression
-evalExpression :: (Decimal -> Decimal -> Maybe Decimal) -> ASTNode -> ASTNode -> State ScriptContext (Either String Value)
-evalExpression op n1 n2 = do
-  value1 <- fmapR (valueAsDecimal . Just) <$> evaluateNode n1
-  value2 <- fmapR (valueAsDecimal . Just) <$> evaluateNode n2
+-- | Evaluate an expression
+evalExpr :: (Decimal -> Decimal -> Decimal) -> ASTNode -> ASTNode -> State ScriptContext (Either String Value)
+evalExpr op n1 n2 = do
+  value1 <- fmapR valueAsDecimal <$> evalNode n1
+  value2 <- fmapR valueAsDecimal <$> evalNode n2
   return
-    ( case value2 of
+    ( case value1 of
         Left e -> Left e
         Right v1 -> case value2 of
           Left e -> Left e
@@ -132,8 +132,4 @@ evalExpression op n1 n2 = do
     eval :: Maybe Decimal -> Maybe Decimal -> Either String Value
     eval Nothing _ = Left "not a number"
     eval _ Nothing = Left "not a number"
-    eval (Just v1) (Just v2) = case result of
-      Nothing -> Left "Not a number"
-      Just r -> Right (NumberValue r)
-      where
-        result = op v1 v2
+    eval (Just v1) (Just v2) = Right (NumberValue (roundTo 5 (op v1 v2)))

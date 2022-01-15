@@ -19,7 +19,7 @@ $symbol     = [ \+ \- \* \/ \= \( \) \[ \] \{ \} ]
 $identS     = [a-zA-Z_]
 $identC     = [a-zA-Z0-9_]
 
-@nonwhite   = [^$white]
+@nonwhite   = [^ $white $symbol ]
 @number     = $digit ($digit | $numsep)* (\. ($digit | $numsep)+)?
 @quotedStr  = \" ( \\. | [^\"\\] )* \"
 @identifier = $identS $identC*
